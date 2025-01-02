@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2022 sqlmap developers (https://sqlmap.org/)
+Copyright (c) 2006-2025 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -41,6 +41,8 @@ class Fingerprint(GenericFingerprint):
                 fork = FORK.ENTERPRISEDB
             elif inject.checkBooleanExpression("VERSION() LIKE '%YB-%'"):           # Reference: https://github.com/yugabyte/yugabyte-db/issues/2447#issue-499562926
                 fork = FORK.YUGABYTEDB
+            elif inject.checkBooleanExpression("VERSION() LIKE '%openGauss%'"):
+                fork = FORK.OPENGAUSS
             elif inject.checkBooleanExpression("AURORA_VERSION() LIKE '%'"):        # Reference: https://aws.amazon.com/premiumsupport/knowledge-center/aurora-version-number/
                 fork = FORK.AURORA
             else:
@@ -117,7 +119,7 @@ class Fingerprint(GenericFingerprint):
 
             if not result:
                 warnMsg = "the back-end DBMS is not %s" % DBMS.PGSQL
-                logger.warn(warnMsg)
+                logger.warning(warnMsg)
 
                 return False
 
@@ -131,7 +133,13 @@ class Fingerprint(GenericFingerprint):
             infoMsg = "actively fingerprinting %s" % DBMS.PGSQL
             logger.info(infoMsg)
 
-            if inject.checkBooleanExpression("GEN_RANDOM_UUID() IS NOT NULL"):
+            if inject.checkBooleanExpression("RANDOM_NORMAL(0.0, 1.0) IS NOT NULL"):
+                Backend.setVersion(">= 16.0")
+            elif inject.checkBooleanExpression("REGEXP_COUNT(NULL,NULL) IS NULL"):
+                Backend.setVersion(">= 15.0")
+            elif inject.checkBooleanExpression("BIT_COUNT(NULL) IS NULL"):
+                Backend.setVersion(">= 14.0")
+            elif inject.checkBooleanExpression("GEN_RANDOM_UUID() IS NOT NULL"):
                 Backend.setVersion(">= 13.0")
             elif inject.checkBooleanExpression("SINH(0)=0"):
                 Backend.setVersion(">= 12.0")
@@ -187,7 +195,7 @@ class Fingerprint(GenericFingerprint):
             return True
         else:
             warnMsg = "the back-end DBMS is not %s" % DBMS.PGSQL
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
 
             return False
 

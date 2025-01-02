@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2022 sqlmap developers (https://sqlmap.org/)
+Copyright (c) 2006-2025 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -10,7 +10,6 @@ import logging
 import random
 import re
 import socket
-import subprocess
 import time
 
 from extra.beep.beep import beep
@@ -218,6 +217,7 @@ def checkSqlInjection(place, parameter, value):
                         if _ > 1:
                             __ = 2 * (_ - 1) + 1 if _ == lower else 2 * _
                             unionExtended = True
+                            test.request._columns = test.request.columns
                             test.request.columns = re.sub(r"\b%d\b" % _, str(__), test.request.columns)
                             title = re.sub(r"\b%d\b" % _, str(__), title)
                             test.title = re.sub(r"\b%d\b" % _, str(__), test.title)
@@ -271,15 +271,18 @@ def checkSqlInjection(place, parameter, value):
                     logger.debug(debugMsg)
                     continue
 
-                if kb.dbmsFilter and not intersect(payloadDbms, kb.dbmsFilter, True):
+                elif kb.dbmsFilter and not intersect(payloadDbms, kb.dbmsFilter, True):
                     debugMsg = "skipping test '%s' because " % title
                     debugMsg += "its declared DBMS is different than provided"
                     logger.debug(debugMsg)
                     continue
 
+                elif kb.reduceTests == False:
+                    pass
+
                 # Skip DBMS-specific test if it does not match the
                 # previously identified DBMS (via DBMS-specific payload)
-                if injection.dbms and not intersect(payloadDbms, injection.dbms, True):
+                elif injection.dbms and not intersect(payloadDbms, injection.dbms, True):
                     debugMsg = "skipping test '%s' because " % title
                     debugMsg += "its declared DBMS is different than identified"
                     logger.debug(debugMsg)
@@ -287,7 +290,7 @@ def checkSqlInjection(place, parameter, value):
 
                 # Skip DBMS-specific test if it does not match the
                 # previously identified DBMS (via DBMS-specific error message)
-                if kb.reduceTests and not intersect(payloadDbms, kb.reduceTests, True):
+                elif kb.reduceTests and not intersect(payloadDbms, kb.reduceTests, True):
                     debugMsg = "skipping test '%s' because the heuristic " % title
                     debugMsg += "tests showed that the back-end DBMS "
                     debugMsg += "could be '%s'" % unArrayizeValue(kb.reduceTests)
@@ -578,7 +581,7 @@ def checkSqlInjection(place, parameter, value):
 
                             if injectable:
                                 if kb.pageStable and not any((conf.string, conf.notString, conf.regexp, conf.code, kb.nullConnection)):
-                                    if all((falseCode, trueCode)) and falseCode != trueCode:
+                                    if all((falseCode, trueCode)) and falseCode != trueCode and trueCode != kb.heuristicCode:
                                         suggestion = conf.code = trueCode
 
                                         infoMsg = "%sparameter '%s' appears to be '%s' injectable (with --code=%d)" % ("%s " % paramType if paramType != parameter else "", parameter, title, conf.code)
@@ -780,22 +783,8 @@ def checkSqlInjection(place, parameter, value):
                         injection.conf.regexp = conf.regexp
                         injection.conf.optimize = conf.optimize
 
-                        if not kb.alerted:
-                            if conf.beep:
-                                beep()
-
-                            if conf.alert:
-                                infoMsg = "executing alerting shell command(s) ('%s')" % conf.alert
-                                logger.info(infoMsg)
-
-                                try:
-                                    process = subprocess.Popen(conf.alert, shell=True)
-                                    process.wait()
-                                except Exception as ex:
-                                    errMsg = "error occurred while executing '%s' ('%s')" % (conf.alert, getSafeExString(ex))
-                                    logger.error(errMsg)
-
-                            kb.alerted = True
+                        if conf.beep:
+                            beep()
 
                         # There is no need to perform this test for other
                         # <where> tags
@@ -810,7 +799,7 @@ def checkSqlInjection(place, parameter, value):
 
         except KeyboardInterrupt:
             warnMsg = "user aborted during detection phase"
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
 
             if conf.multipleTargets:
                 msg = "how do you want to proceed? [ne(X)t target/(s)kip current test/(e)nd detection phase/(n)ext parameter/(c)hange verbosity/(q)uit]"
@@ -826,11 +815,14 @@ def checkSqlInjection(place, parameter, value):
                 choice = None
                 while not ((choice or "").isdigit() and 0 <= int(choice) <= 6):
                     if choice:
-                        logger.warn("invalid value")
+                        logger.warning("invalid value")
                     msg = "enter new verbosity level: [0-6] "
                     choice = readInput(msg, default=str(conf.verbose), checkBatch=False)
                 conf.verbose = int(choice)
                 setVerbosity()
+                if hasattr(test.request, "columns") and hasattr(test.request, "_columns"):
+                    test.request.columns = test.request._columns
+                    delattr(test.request, "_columns")
                 tests.insert(0, test)
             elif choice == 'N':
                 return None
@@ -851,15 +843,13 @@ def checkSqlInjection(place, parameter, value):
             warnMsg = "in OR boolean-based injection cases, please consider usage "
             warnMsg += "of switch '--drop-set-cookie' if you experience any "
             warnMsg += "problems during data retrieval"
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
 
         if not checkFalsePositives(injection):
             if conf.hostname in kb.vulnHosts:
                 kb.vulnHosts.remove(conf.hostname)
-
             if NOTE.FALSE_POSITIVE_OR_UNEXPLOITABLE not in injection.notes:
                 injection.notes.append(NOTE.FALSE_POSITIVE_OR_UNEXPLOITABLE)
-
     else:
         injection = None
 
@@ -976,7 +966,7 @@ def checkFalsePositives(injection):
 
         if not retVal:
             warnMsg = "false positive or unexploitable injection point detected"
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
 
         kb.injection = popValue()
 
@@ -1002,7 +992,7 @@ def checkSuhosinPatch(injection):
             warnMsg = "parameter length constraining "
             warnMsg += "mechanism detected (e.g. Suhosin patch). "
             warnMsg += "Potential problems in enumeration phase can be expected"
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
 
         kb.injection = popValue()
 
@@ -1023,7 +1013,7 @@ def checkFilteredChars(injection):
             warnMsg += "filtered by the back-end server. There is a strong "
             warnMsg += "possibility that sqlmap won't be able to properly "
             warnMsg += "exploit this vulnerability"
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
 
     # inference techniques depend on character '>'
     if not any(_ in injection.data for _ in (PAYLOAD.TECHNIQUE.ERROR, PAYLOAD.TECHNIQUE.UNION, PAYLOAD.TECHNIQUE.QUERY)):
@@ -1031,7 +1021,7 @@ def checkFilteredChars(injection):
             warnMsg = "it appears that the character '>' is "
             warnMsg += "filtered by the back-end server. You are strongly "
             warnMsg += "advised to rerun with the '--tamper=between'"
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
 
     kb.injection = popValue()
 
@@ -1060,9 +1050,10 @@ def heuristicCheckSqlInjection(place, parameter):
 
     payload = "%s%s%s" % (prefix, randStr, suffix)
     payload = agent.payload(place, parameter, newValue=payload)
-    page, _, _ = Request.queryPage(payload, place, content=True, raise404=False)
+    page, _, code = Request.queryPage(payload, place, content=True, raise404=False)
 
     kb.heuristicPage = page
+    kb.heuristicCode = code
     kb.heuristicMode = False
 
     parseFilePaths(page)
@@ -1122,7 +1113,7 @@ def heuristicCheckSqlInjection(place, parameter):
 
     else:
         infoMsg += "not be injectable"
-        logger.warn(infoMsg)
+        logger.warning(infoMsg)
 
     kb.heuristicMode = True
     kb.disableHtmlDecoding = True
@@ -1230,7 +1221,7 @@ def checkDynamicContent(firstPage, secondPage):
             if count > conf.retries:
                 warnMsg = "target URL content appears to be too dynamic. "
                 warnMsg += "Switching to '--text-only' "
-                logger.warn(warnMsg)
+                logger.warning(warnMsg)
 
                 conf.textOnly = True
                 return
@@ -1288,7 +1279,7 @@ def checkStability():
         warnMsg += "injectable parameters are detected, or in case of "
         warnMsg += "junk results, refer to user's manual paragraph "
         warnMsg += "'Page comparison'"
-        logger.warn(warnMsg)
+        logger.warning(warnMsg)
 
         message = "how do you want to proceed? [(C)ontinue/(s)tring/(r)egex/(q)uit] "
         choice = readInput(message, default='C').upper()
@@ -1367,11 +1358,10 @@ def checkWaf():
     retVal = False
     payload = "%d %s" % (randomInt(), IPS_WAF_CHECK_PAYLOAD)
 
+    place = PLACE.GET
     if PLACE.URI in conf.parameters:
-        place = PLACE.POST
         value = "%s=%s" % (randomStr(), agent.addPayloadDelimiters(payload))
     else:
-        place = PLACE.GET
         value = "" if not conf.parameters.get(PLACE.GET) else conf.parameters[PLACE.GET] + DEFAULT_GET_POST_DELIMITER
         value += "%s=%s" % (randomStr(), agent.addPayloadDelimiters(payload))
 
@@ -1514,7 +1504,7 @@ def checkConnection(suppressOutput=False):
                 warnMsg = "you provided '%s' as the string to " % conf.string
                 warnMsg += "match, but such a string is not within the target "
                 warnMsg += "URL raw response, sqlmap will carry on anyway"
-                logger.warn(warnMsg)
+                logger.warning(warnMsg)
 
         if conf.regexp:
             infoMsg = "testing if the provided regular expression matches within "
@@ -1525,7 +1515,7 @@ def checkConnection(suppressOutput=False):
                 warnMsg = "you provided '%s' as the regular expression " % conf.regexp
                 warnMsg += "which does not have any match within the target URL raw response. sqlmap "
                 warnMsg += "will carry on anyway"
-                logger.warn(warnMsg)
+                logger.warning(warnMsg)
 
         kb.errorIsNone = False
 
@@ -1540,12 +1530,12 @@ def checkConnection(suppressOutput=False):
         elif wasLastResponseDBMSError():
             warnMsg = "there is a DBMS error found in the HTTP response body "
             warnMsg += "which could interfere with the results of the tests"
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
         elif wasLastResponseHTTPError():
             if getLastRequestHTTPError() not in (conf.ignoreCode or []):
                 warnMsg = "the web server responded with an HTTP error code (%d) " % getLastRequestHTTPError()
                 warnMsg += "which could interfere with the results of the tests"
-                logger.warn(warnMsg)
+                logger.warning(warnMsg)
         else:
             kb.errorIsNone = True
 

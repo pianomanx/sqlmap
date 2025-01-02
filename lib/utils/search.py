@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2022 sqlmap developers (https://sqlmap.org/)
+Copyright (c) 2006-2025 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -106,7 +106,7 @@ def _search(dork):
 
     page = decodePage(page, responseHeaders.get(HTTP_HEADER.CONTENT_ENCODING), responseHeaders.get(HTTP_HEADER.CONTENT_TYPE))
 
-    page = getUnicode(page)  # Note: if upper function call fails (Issue #4202)
+    page = getUnicode(page)  # Note: if decodePage call fails (Issue #4202)
 
     retVal = [_urllib.parse.unquote(match.group(1) or match.group(2)) for match in re.finditer(GOOGLE_REGEX, page, re.I)]
 
@@ -171,6 +171,8 @@ def _search(dork):
             errMsg = "unable to connect"
             raise SqlmapConnectionException(errMsg)
 
+        page = getUnicode(page)  # Note: if decodePage call fails (Issue #4202)
+
         retVal = [_urllib.parse.unquote(match.group(1).replace("&amp;", "&")) for match in re.finditer(regex, page, re.I | re.S)]
 
         if not retVal and "issue with the Tor Exit Node you are currently using" in page:
@@ -196,7 +198,7 @@ def search(dork):
             logger.critical(getSafeExString(ex))
 
             warnMsg = "changing proxy"
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
 
             conf.proxy = None
 

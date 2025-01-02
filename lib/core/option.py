@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2022 sqlmap developers (https://sqlmap.org/)
+Copyright (c) 2006-2025 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -128,7 +128,6 @@ from lib.core.settings import SQLMAP_ENVIRONMENT_PREFIX
 from lib.core.settings import SUPPORTED_DBMS
 from lib.core.settings import SUPPORTED_OS
 from lib.core.settings import TIME_DELAY_CANDIDATES
-from lib.core.settings import UNION_CHAR_REGEX
 from lib.core.settings import UNKNOWN_DBMS_VERSION
 from lib.core.settings import URI_INJECTABLE_REGEX
 from lib.core.threads import getCurrentThreadData
@@ -416,6 +415,9 @@ def _doSearch():
                 conf.googlePage += 1
 
 def _setStdinPipeTargets():
+    if conf.url:
+        return
+
     if isinstance(conf.stdinPipe, _collections.Iterable):
         infoMsg = "using 'STDIN' for parsing targets list"
         logger.info(infoMsg)
@@ -433,7 +435,7 @@ def _setStdinPipeTargets():
             def next(self):
                 try:
                     line = next(conf.stdinPipe)
-                except (IOError, OSError):
+                except (IOError, OSError, TypeError, UnicodeDecodeError):
                     line = None
 
                 if line:
@@ -475,7 +477,7 @@ def _setBulkMultipleTargets():
 
     if not found and not conf.forms and not conf.crawlDepth:
         warnMsg = "no usable links found (with GET parameters)"
-        logger.warn(warnMsg)
+        logger.warning(warnMsg)
 
 def _findPageForms():
     if not conf.forms or conf.crawlDepth:
@@ -523,7 +525,7 @@ def _findPageForms():
 
     if not found:
         warnMsg = "no forms found"
-        logger.warn(warnMsg)
+        logger.warning(warnMsg)
 
 def _setDBMSAuthentication():
     """
@@ -607,16 +609,16 @@ def _setMetasploit():
             warnMsg += "or more of the needed Metasploit executables "
             warnMsg += "within msfcli, msfconsole, msfencode and "
             warnMsg += "msfpayload do not exist"
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
     else:
         warnMsg = "you did not provide the local path where Metasploit "
         warnMsg += "Framework is installed"
-        logger.warn(warnMsg)
+        logger.warning(warnMsg)
 
     if not msfEnvPathExists:
         warnMsg = "sqlmap is going to look for Metasploit Framework "
         warnMsg += "installation inside the environment path(s)"
-        logger.warn(warnMsg)
+        logger.warning(warnMsg)
 
         envPaths = os.environ.get("PATH", "").split(";" if IS_WIN else ":")
 
@@ -810,9 +812,10 @@ def _setTamperingFunctions():
                 raise SqlmapSyntaxException("cannot import tamper module '%s' (%s)" % (getUnicode(filename[:-3]), getSafeExString(ex)))
 
             priority = PRIORITY.NORMAL if not hasattr(module, "__priority__") else module.__priority__
+            priority = priority if priority is not None else PRIORITY.LOWEST
 
             for name, function in inspect.getmembers(module, inspect.isfunction):
-                if name == "tamper" and (hasattr(inspect, "signature") and all(_ in inspect.signature(function).parameters for _ in ("payload", "kwargs")) or hasattr(inspect, "getargspec") and inspect.getargspec(function).args and inspect.getargspec(function).keywords == "kwargs"):
+                if name == "tamper" and (hasattr(inspect, "signature") and all(_ in inspect.signature(function).parameters for _ in ("payload", "kwargs")) or inspect.getargspec(function).args and inspect.getargspec(function).keywords == "kwargs"):
                     found = True
                     kb.tamperFunctions.append(function)
                     function.__name__ = module.__name__
@@ -926,7 +929,7 @@ def _setPreprocessFunctions():
             else:
                 try:
                     function(_urllib.request.Request("http://localhost"))
-                except:
+                except Exception as ex:
                     tbMsg = traceback.format_exc()
 
                     if conf.debug:
@@ -940,8 +943,8 @@ def _setPreprocessFunctions():
 
                     errMsg = "function 'preprocess(req)' "
                     errMsg += "in preprocess script '%s' " % script
-                    errMsg += "appears to be invalid "
-                    errMsg += "(Note: find template script at '%s')" % filename
+                    errMsg += "had issues in a test run ('%s'). " % getSafeExString(ex)
+                    errMsg += "You can find a template script at '%s'" % filename
                     raise SqlmapGenericException(errMsg)
 
 def _setPostprocessFunctions():
@@ -1202,10 +1205,10 @@ def _setHTTPHandlers():
 
             if conf.proxy:
                 warnMsg += "with HTTP(s) proxy"
-                logger.warn(warnMsg)
+                logger.warning(warnMsg)
             elif conf.authType:
                 warnMsg += "with authentication methods"
-                logger.warn(warnMsg)
+                logger.warning(warnMsg)
             else:
                 handlers.append(keepAliveHandler)
 
@@ -1358,7 +1361,7 @@ def _setHTTPAuthentication():
             errMsg += "be in format 'DOMAIN\\username:password'"
         elif authType == AUTH_TYPE.PKI:
             errMsg = "HTTP PKI authentication require "
-            errMsg += "usage of option `--auth-pki`"
+            errMsg += "usage of option `--auth-file`"
             raise SqlmapSyntaxException(errMsg)
 
         aCredRegExp = re.search(regExp, conf.authCred)
@@ -1547,7 +1550,7 @@ def _setHTTPTimeout():
         if conf.timeout < 3.0:
             warnMsg = "the minimum HTTP timeout is 3 seconds, sqlmap "
             warnMsg += "will going to reset it"
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
 
             conf.timeout = 3.0
     else:
@@ -1586,13 +1589,13 @@ def _createHomeDirectories():
 
             if conf.get("outputDir") and context == "output":
                 warnMsg = "using '%s' as the %s directory" % (directory, context)
-                logger.warn(warnMsg)
+                logger.warning(warnMsg)
         except (OSError, IOError) as ex:
             tempDir = tempfile.mkdtemp(prefix="sqlmap%s" % context)
             warnMsg = "unable to %s %s directory " % ("create" if not os.path.isdir(directory) else "write to the", context)
             warnMsg += "'%s' (%s). " % (directory, getUnicode(ex))
             warnMsg += "Using temporary directory '%s' instead" % getUnicode(tempDir)
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
 
             paths["SQLMAP_%s_PATH" % context.upper()] = tempDir
 
@@ -1617,7 +1620,7 @@ def _createTemporaryDirectory():
             tempfile.tempdir = conf.tmpDir
 
             warnMsg = "using '%s' as the temporary directory" % conf.tmpDir
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
         except (OSError, IOError) as ex:
             errMsg = "there has been a problem while accessing "
             errMsg += "temporary directory location(s) ('%s')" % getSafeExString(ex)
@@ -1632,7 +1635,7 @@ def _createTemporaryDirectory():
             warnMsg += "make sure that there is enough disk space left. If problem persists, "
             warnMsg += "try to set environment variable 'TEMP' to a location "
             warnMsg += "writeable by the current user"
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
 
     if "sqlmap" not in (tempfile.tempdir or "") or conf.tmpDir and tempfile.tempdir == conf.tmpDir:
         try:
@@ -1693,10 +1696,19 @@ def _cleanupOptions():
             try:
                 conf.ignoreCode = [int(_) for _ in re.split(PARAMETER_SPLITTING_REGEX, conf.ignoreCode)]
             except ValueError:
-                errMsg = "options '--ignore-code' should contain a list of integer values or a wildcard value '%s'" % IGNORE_CODE_WILDCARD
+                errMsg = "option '--ignore-code' should contain a list of integer values or a wildcard value '%s'" % IGNORE_CODE_WILDCARD
                 raise SqlmapSyntaxException(errMsg)
     else:
         conf.ignoreCode = []
+
+    if conf.abortCode:
+        try:
+            conf.abortCode = [int(_) for _ in re.split(PARAMETER_SPLITTING_REGEX, conf.abortCode)]
+        except ValueError:
+            errMsg = "option '--abort-code' should contain a list of integer values"
+            raise SqlmapSyntaxException(errMsg)
+    else:
+        conf.abortCode = []
 
     if conf.paramFilter:
         conf.paramFilter = [_.strip() for _ in re.split(PARAMETER_SPLITTING_REGEX, conf.paramFilter.upper())]
@@ -1789,6 +1801,9 @@ def _cleanupOptions():
                     conf.dbms = dbms if conf.dbms and ',' not in conf.dbms else None
                     break
 
+    if conf.uValues:
+        conf.uCols = "%d-%d" % (1 + conf.uValues.count(','), 1 + conf.uValues.count(','))
+
     if conf.testFilter:
         conf.testFilter = conf.testFilter.strip('*+')
         conf.testFilter = re.sub(r"([^.])([*+])", r"\g<1>.\g<2>", conf.testFilter)
@@ -1832,12 +1847,21 @@ def _cleanupOptions():
             warnMsg = "increasing default value for "
             warnMsg += "option '--time-sec' to %d because " % conf.timeSec
             warnMsg += "switch '--tor' was provided"
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
     else:
         kb.adjustTimeDelay = ADJUST_TIME_DELAY.DISABLE
 
     if conf.retries:
         conf.retries = min(conf.retries, MAX_CONNECT_RETRIES)
+
+    if conf.url:
+        match = re.search(r"\A(\w+://)?([^/@?]+)@", conf.url)
+        if match:
+            credentials = match.group(2)
+            conf.url = conf.url.replace("%s@" % credentials, "", 1)
+
+            conf.authType = AUTH_TYPE.BASIC
+            conf.authCred = credentials if ':' in credentials else "%s:" % credentials
 
     if conf.code:
         conf.code = int(conf.code)
@@ -2036,6 +2060,7 @@ def _setKnowledgeBaseAttributes(flushAll=True):
     kb.delayCandidates = TIME_DELAY_CANDIDATES * [0]
     kb.dep = None
     kb.disableHtmlDecoding = False
+    kb.disableShiftTable = False
     kb.dnsMode = False
     kb.dnsTest = None
     kb.docRoot = None
@@ -2066,6 +2091,7 @@ def _setKnowledgeBaseAttributes(flushAll=True):
     kb.headersFp = {}
     kb.heuristicDbms = None
     kb.heuristicExtendedDbms = None
+    kb.heuristicCode = None
     kb.heuristicMode = False
     kb.heuristicPage = False
     kb.heuristicTest = None
@@ -2084,7 +2110,7 @@ def _setKnowledgeBaseAttributes(flushAll=True):
     kb.lastParserStatus = None
 
     kb.locks = AttribDict()
-    for _ in ("cache", "connError", "count", "handlers", "hint", "index", "io", "limit", "liveCookies", "log", "socket", "redirect", "request", "value"):
+    for _ in ("cache", "connError", "count", "handlers", "hint", "identYwaf", "index", "io", "limit", "liveCookies", "log", "socket", "redirect", "request", "value"):
         kb.locks[_] = threading.Lock()
 
     kb.matchRatio = None
@@ -2123,6 +2149,7 @@ def _setKnowledgeBaseAttributes(flushAll=True):
     kb.prependFlag = False
     kb.processResponseCounter = 0
     kb.previousMethod = None
+    kb.processNonCustom = None
     kb.processUserMarks = None
     kb.proxyAuthHeader = None
     kb.queryCounter = 0
@@ -2145,6 +2172,7 @@ def _setKnowledgeBaseAttributes(flushAll=True):
     kb.smokeMode = False
     kb.reduceTests = None
     kb.sslSuccess = False
+    kb.startTime = time.time()
     kb.stickyDBMS = False
     kb.suppressResumeInfo = False
     kb.tableFrom = None
@@ -2156,7 +2184,6 @@ def _setKnowledgeBaseAttributes(flushAll=True):
     kb.testType = None
     kb.threadContinue = True
     kb.threadException = False
-    kb.tlsSNI = {}
     kb.uChar = NULL
     kb.udfFail = False
     kb.unionDuplicates = False
@@ -2197,7 +2224,7 @@ def _useWizardInterface():
 
     while not conf.url:
         message = "Please enter full target URL (-u): "
-        conf.url = readInput(message, default=None)
+        conf.url = readInput(message, default=None, checkBatch=False)
 
     message = "%s data (--data) [Enter for None]: " % ((conf.method if conf.method != HTTPMETHOD.GET else None) or HTTPMETHOD.POST)
     conf.data = readInput(message, default=None)
@@ -2208,7 +2235,7 @@ def _useWizardInterface():
         if not conf.crawlDepth and not conf.forms:
             warnMsg += "Will search for forms"
             conf.forms = True
-        logger.warn(warnMsg)
+        logger.warning(warnMsg)
 
     choice = None
 
@@ -2464,7 +2491,7 @@ def _setTorHttpProxySettings():
         warnMsg += "Tor anonymizing network because of "
         warnMsg += "known issues with default settings of various 'bundles' "
         warnMsg += "(e.g. Vidalia)"
-        logger.warn(warnMsg)
+        logger.warning(warnMsg)
 
 def _setTorSocksProxySettings():
     infoMsg = "setting Tor SOCKS proxy settings"
@@ -2544,7 +2571,7 @@ def _basicOptionValidation():
     if isinstance(conf.limitStart, int) and conf.limitStart > 0 and \
        isinstance(conf.limitStop, int) and conf.limitStop < conf.limitStart:
         warnMsg = "usage of option '--start' (limitStart) which is bigger than value for --stop (limitStop) option is considered unstable"
-        logger.warn(warnMsg)
+        logger.warning(warnMsg)
 
     if isinstance(conf.firstChar, int) and conf.firstChar > 0 and \
        isinstance(conf.lastChar, int) and conf.lastChar < conf.firstChar:
@@ -2554,10 +2581,14 @@ def _basicOptionValidation():
     if conf.proxyFile and not any((conf.randomAgent, conf.mobile, conf.agent, conf.requestFile)):
         warnMsg = "usage of switch '--random-agent' is strongly recommended when "
         warnMsg += "using option '--proxy-file'"
-        logger.warn(warnMsg)
+        logger.warning(warnMsg)
 
     if conf.textOnly and conf.nullConnection:
         errMsg = "switch '--text-only' is incompatible with switch '--null-connection'"
+        raise SqlmapSyntaxException(errMsg)
+
+    if conf.uValues and conf.uChar:
+        errMsg = "option '--union-values' is incompatible with option '--union-char'"
         raise SqlmapSyntaxException(errMsg)
 
     if conf.base64Parameter and conf.tamper:
@@ -2643,6 +2674,9 @@ def _basicOptionValidation():
             raise SqlmapSyntaxException(errMsg)
 
     if conf.paramExclude:
+        if re.search(r"\A\w+,", conf.paramExclude):
+            conf.paramExclude = r"\A(%s)\Z" % ('|'.join(re.escape(_).strip() for _ in conf.paramExclude.split(',')))
+
         try:
             re.compile(conf.paramExclude)
         except Exception as ex:
@@ -2662,10 +2696,10 @@ def _basicOptionValidation():
             warnMsg = "increasing default value for "
             warnMsg += "option '--retries' to %d because " % conf.retries
             warnMsg += "option '--retry-on' was provided"
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
 
 
-    if conf.cookieDel and len(conf.cookieDel):
+    if conf.cookieDel and len(conf.cookieDel) != 1:
         errMsg = "option '--cookie-del' should contain a single character (e.g. ';')"
         raise SqlmapSyntaxException(errMsg)
 
@@ -2723,6 +2757,10 @@ def _basicOptionValidation():
         errMsg = "option '--csrf-method' requires usage of option '--csrf-token'"
         raise SqlmapSyntaxException(errMsg)
 
+    if conf.csrfData and not conf.csrfToken:
+        errMsg = "option '--csrf-data' requires usage of option '--csrf-token'"
+        raise SqlmapSyntaxException(errMsg)
+
     if conf.csrfToken and conf.threads > 1:
         errMsg = "option '--csrf-url' is incompatible with option '--threads'"
         raise SqlmapSyntaxException(errMsg)
@@ -2775,6 +2813,11 @@ def _basicOptionValidation():
         errMsg = "option '--dump-format' accepts one of following values: %s" % ", ".join(getPublicTypeMembers(DUMP_FORMAT, True))
         raise SqlmapSyntaxException(errMsg)
 
+    if conf.uValues and (not re.search(r"\A['\w\s.,()%s-]+\Z" % CUSTOM_INJECTION_MARK_CHAR, conf.uValues) or conf.uValues.count(CUSTOM_INJECTION_MARK_CHAR) != 1):
+        errMsg = "option '--union-values' must contain valid UNION column values, along with the injection position "
+        errMsg += "(e.g. 'NULL,1,%s,NULL')" % CUSTOM_INJECTION_MARK_CHAR
+        raise SqlmapSyntaxException(errMsg)
+
     if conf.skip and conf.testParameter:
         if intersect(conf.skip, conf.testParameter):
             errMsg = "option '--skip' is incompatible with option '-p'"
@@ -2799,10 +2842,6 @@ def _basicOptionValidation():
 
     if conf.timeSec < 1:
         errMsg = "value for option '--time-sec' must be a positive integer"
-        raise SqlmapSyntaxException(errMsg)
-
-    if conf.uChar and not re.match(UNION_CHAR_REGEX, conf.uChar):
-        errMsg = "value for option '--union-char' must be an alpha-numeric value (e.g. 1)"
         raise SqlmapSyntaxException(errMsg)
 
     if conf.hashFile and any((conf.direct, conf.url, conf.logFile, conf.bulkFile, conf.googleDork, conf.configFile, conf.requestFile, conf.updateAll, conf.smokeTest, conf.wizard, conf.dependencies, conf.purge, conf.listTampers)):
@@ -2830,10 +2869,13 @@ def _basicOptionValidation():
         else:
             conf.encoding = _
 
-    if conf.loadCookies:
-        if not os.path.exists(conf.loadCookies):
-            errMsg = "cookies file '%s' does not exist" % conf.loadCookies
-            raise SqlmapFilePathException(errMsg)
+    if conf.fileWrite and not os.path.isfile(conf.fileWrite):
+        errMsg = "file '%s' does not exist" % os.path.abspath(conf.fileWrite)
+        raise SqlmapFilePathException(errMsg)
+
+    if conf.loadCookies and not os.path.exists(conf.loadCookies):
+        errMsg = "cookies file '%s' does not exist" % os.path.abspath(conf.loadCookies)
+        raise SqlmapFilePathException(errMsg)
 
 def initOptions(inputOptions=AttribDict(), overrideOptions=False):
     _setConfAttributes()

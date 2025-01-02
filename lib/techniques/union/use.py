@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2022 sqlmap developers (https://sqlmap.org/)
+Copyright (c) 2006-2025 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -37,6 +37,7 @@ from lib.core.common import singleTimeWarnMessage
 from lib.core.common import unArrayizeValue
 from lib.core.common import wasLastResponseDBMSError
 from lib.core.compat import xrange
+from lib.core.convert import decodeBase64
 from lib.core.convert import getUnicode
 from lib.core.convert import htmlUnescape
 from lib.core.data import conf
@@ -126,6 +127,9 @@ def _oneShotUnionUse(expression, unpack=True, limited=False):
                         try:
                             retVal = ""
                             for row in json.loads(output):
+                                # NOTE: for cases with automatic MySQL Base64 encoding of JSON array values, like: ["base64:type15:MQ=="]
+                                for match in re.finditer(r"base64:type\d+:([^ ]+)", row):
+                                    row = row.replace(match.group(0), decodeBase64(match.group(1), binary=False))
                                 retVal += "%s%s%s" % (kb.chars.start, row, kb.chars.stop)
                         except:
                             retVal = None
@@ -167,7 +171,7 @@ def _oneShotUnionUse(expression, unpack=True, limited=False):
                 warnMsg = "possible server trimmed output detected "
                 warnMsg += "(probably due to its length and/or content): "
                 warnMsg += safecharencode(trimmed)
-                logger.warn(warnMsg)
+                logger.warning(warnMsg)
 
             elif re.search(r"ORDER BY [^ ]+\Z", expression):
                 debugMsg = "retrying failed SQL query without the ORDER BY clause"
@@ -252,12 +256,12 @@ def unionUse(expression, unpack=True, dump=False):
         debugMsg += "it does not play well with UNION query SQL injection"
         singleTimeDebugMessage(debugMsg)
 
-    if Backend.getIdentifiedDbms() in (DBMS.MYSQL, DBMS.ORACLE, DBMS.PGSQL, DBMS.MSSQL, DBMS.SQLITE) and expressionFields and not any((conf.binaryFields, conf.limitStart, conf.limitStop, conf.forcePartial)):
+    if Backend.getIdentifiedDbms() in (DBMS.MYSQL, DBMS.ORACLE, DBMS.PGSQL, DBMS.MSSQL, DBMS.SQLITE) and expressionFields and not any((conf.binaryFields, conf.limitStart, conf.limitStop, conf.forcePartial, conf.disableJson)):
         match = re.search(r"SELECT\s*(.+?)\bFROM", expression, re.I)
-        if match and not (Backend.isDbms(DBMS.ORACLE) and FROM_DUMMY_TABLE[DBMS.ORACLE] in expression) and not re.search(r"\b(MIN|MAX|COUNT)\(", expression):
+        if match and not (Backend.isDbms(DBMS.ORACLE) and FROM_DUMMY_TABLE[DBMS.ORACLE] in expression) and not re.search(r"\b(MIN|MAX|COUNT|EXISTS)\(", expression):
             kb.jsonAggMode = True
             if Backend.isDbms(DBMS.MYSQL):
-                query = expression.replace(expressionFields, "CONCAT('%s',JSON_ARRAYAGG(CONCAT_WS('%s',%s)),'%s')" % (kb.chars.start, kb.chars.delimiter, expressionFields, kb.chars.stop), 1)
+                query = expression.replace(expressionFields, "CONCAT('%s',JSON_ARRAYAGG(CONCAT_WS('%s',%s)),'%s')" % (kb.chars.start, kb.chars.delimiter, ','.join(agent.nullAndCastField(field) for field in expressionFieldsList), kb.chars.stop), 1)
             elif Backend.isDbms(DBMS.ORACLE):
                 query = expression.replace(expressionFields, "'%s'||JSON_ARRAYAGG(%s)||'%s'" % (kb.chars.start, ("||'%s'||" % kb.chars.delimiter).join(expressionFieldsList), kb.chars.stop), 1)
             elif Backend.isDbms(DBMS.SQLITE):
@@ -304,15 +308,15 @@ def unionUse(expression, unpack=True, dump=False):
                 warnMsg += "of entries for the SQL query provided. "
                 warnMsg += "sqlmap will assume that it returns only "
                 warnMsg += "one entry"
-                logger.warn(warnMsg)
+                logger.warning(warnMsg)
 
                 stopLimit = 1
 
-            elif (not count or int(count) == 0):
+            elif not isNumPosStrValue(count):
                 if not count:
                     warnMsg = "the SQL query provided does not "
                     warnMsg += "return any output"
-                    logger.warn(warnMsg)
+                    logger.warning(warnMsg)
                 else:
                     value = []  # for empty tables
                 return value
@@ -429,7 +433,7 @@ def unionUse(expression, unpack=True, dump=False):
 
                     warnMsg = "user aborted during enumeration. sqlmap "
                     warnMsg += "will display partial output"
-                    logger.warn(warnMsg)
+                    logger.warning(warnMsg)
 
                 finally:
                     for _ in sorted(threadData.shared.buffered):

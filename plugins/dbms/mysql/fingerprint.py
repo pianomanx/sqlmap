@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2022 sqlmap developers (https://sqlmap.org/)
+Copyright (c) 2006-2025 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -37,7 +37,7 @@ class Fingerprint(GenericFingerprint):
 
         if not result:
             warnMsg = "unable to perform %s comment injection" % DBMS.MYSQL
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
 
             return None
 
@@ -45,9 +45,12 @@ class Fingerprint(GenericFingerprint):
         # Reference: https://dev.mysql.com/doc/relnotes/mysql/<major>.<minor>/en/
 
         versions = (
-            (80000, 80029),  # MySQL 8.0
+            (80300, 80302),  # MySQL 8.3
+            (80200, 80202),  # MySQL 8.2
+            (80100, 80102),  # MySQL 8.1
+            (80000, 80037),  # MySQL 8.0
             (60000, 60014),  # MySQL 6.0
-            (50700, 50737),  # MySQL 5.7
+            (50700, 50745),  # MySQL 5.7
             (50600, 50652),  # MySQL 5.6
             (50500, 50563),  # MySQL 5.5
             (50400, 50404),  # MySQL 5.4
@@ -166,9 +169,8 @@ class Fingerprint(GenericFingerprint):
         if not conf.extensiveFp and Backend.isDbmsWithin(MYSQL_ALIASES):
             setDbms("%s %s" % (DBMS.MYSQL, Backend.getVersion()))
 
-            if Backend.isVersionGreaterOrEqualThan("5"):
+            if Backend.isVersionGreaterOrEqualThan("5") or inject.checkBooleanExpression("DATABASE() LIKE SCHEMA()"):
                 kb.data.has_information_schema = True
-
             self.getBanner()
 
             return True
@@ -176,7 +178,7 @@ class Fingerprint(GenericFingerprint):
         infoMsg = "testing %s" % DBMS.MYSQL
         logger.info(infoMsg)
 
-        result = inject.checkBooleanExpression("QUARTER(NULL) IS NULL")
+        result = inject.checkBooleanExpression("QUARTER(NULL XOR NULL) IS NULL")
 
         if result:
             infoMsg = "confirming %s" % DBMS.MYSQL
@@ -193,7 +195,7 @@ class Fingerprint(GenericFingerprint):
 
             if not result:
                 warnMsg = "the back-end DBMS is not %s" % DBMS.MYSQL
-                logger.warn(warnMsg)
+                logger.warning(warnMsg)
 
                 return False
 
@@ -298,7 +300,7 @@ class Fingerprint(GenericFingerprint):
             return True
         else:
             warnMsg = "the back-end DBMS is not %s" % DBMS.MYSQL
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
 
             return False
 

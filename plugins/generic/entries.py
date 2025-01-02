@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2022 sqlmap developers (https://sqlmap.org/)
+Copyright (c) 2006-2025 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -68,7 +68,7 @@ class Entries(object):
                 warnMsg = "missing database parameter. sqlmap is going "
                 warnMsg += "to use the current database to enumerate "
                 warnMsg += "table(s) entries"
-                logger.warn(warnMsg)
+                logger.warning(warnMsg)
 
             conf.db = self.getCurrentDb()
 
@@ -115,7 +115,7 @@ class Entries(object):
             if kb.dumpKeyboardInterrupt:
                 break
 
-            if conf.exclude and re.search(conf.exclude, tbl, re.I) is not None:
+            if conf.exclude and re.search(conf.exclude, unsafeSQLIdentificatorNaming(tbl), re.I) is not None:
                 infoMsg = "skipping table '%s'" % unsafeSQLIdentificatorNaming(tbl)
                 singleTimeLogMessage(infoMsg)
                 continue
@@ -134,15 +134,17 @@ class Entries(object):
                     kb.dumpTable = "%s:%s" % (conf.db, tbl)
                 elif Backend.isDbms(DBMS.SQLITE):
                     kb.dumpTable = tbl
+                elif METADB_SUFFIX.upper() in conf.db.upper():
+                    kb.dumpTable = tbl
                 else:
                     kb.dumpTable = "%s.%s" % (conf.db, tbl)
 
                 if safeSQLIdentificatorNaming(conf.db) not in kb.data.cachedColumns or safeSQLIdentificatorNaming(tbl, True) not in kb.data.cachedColumns[safeSQLIdentificatorNaming(conf.db)] or not kb.data.cachedColumns[safeSQLIdentificatorNaming(conf.db)][safeSQLIdentificatorNaming(tbl, True)]:
                     warnMsg = "unable to enumerate the columns for table '%s'" % unsafeSQLIdentificatorNaming(tbl)
-                    if METADB_SUFFIX not in conf.db:
+                    if METADB_SUFFIX.upper() not in conf.db.upper():
                         warnMsg += " in database '%s'" % unsafeSQLIdentificatorNaming(conf.db)
                     warnMsg += ", skipping" if len(tblList) > 1 else ""
-                    logger.warn(warnMsg)
+                    logger.warning(warnMsg)
 
                     continue
 
@@ -154,10 +156,10 @@ class Entries(object):
 
                 if not colList:
                     warnMsg = "skipping table '%s'" % unsafeSQLIdentificatorNaming(tbl)
-                    if METADB_SUFFIX not in conf.db:
+                    if METADB_SUFFIX.upper() not in conf.db.upper():
                         warnMsg += " in database '%s'" % unsafeSQLIdentificatorNaming(conf.db)
                     warnMsg += " (no usable column names)"
-                    logger.warn(warnMsg)
+                    logger.warning(warnMsg)
                     continue
 
                 kb.dumpColumns = [unsafeSQLIdentificatorNaming(_) for _ in colList]
@@ -168,7 +170,7 @@ class Entries(object):
                 if conf.col:
                     infoMsg += " of column(s) '%s'" % colNames
                 infoMsg += " for table '%s'" % unsafeSQLIdentificatorNaming(tbl)
-                if METADB_SUFFIX not in conf.db:
+                if METADB_SUFFIX.upper() not in conf.db.upper():
                     infoMsg += " in database '%s'" % unsafeSQLIdentificatorNaming(conf.db)
                 logger.info(infoMsg)
 
@@ -222,7 +224,7 @@ class Entries(object):
                                         kb.dumpKeyboardInterrupt = True
                                         clearConsoleLine()
                                         warnMsg = "Ctrl+C detected in dumping phase"
-                                        logger.warn(warnMsg)
+                                        logger.warning(warnMsg)
 
                             if isNoneValue(entries) and not kb.dumpKeyboardInterrupt:
                                 try:
@@ -232,14 +234,14 @@ class Entries(object):
                                     kb.dumpKeyboardInterrupt = True
                                     clearConsoleLine()
                                     warnMsg = "Ctrl+C detected in dumping phase"
-                                    logger.warn(warnMsg)
+                                    logger.warning(warnMsg)
 
                                 if retVal:
                                     entries, _ = retVal
                                     entries = BigArray(_zip(*[entries[colName] for colName in colList]))
                         else:
                             query = rootQuery.inband.query % (colString, conf.db, tbl)
-                    elif Backend.getIdentifiedDbms() in (DBMS.MYSQL, DBMS.PGSQL, DBMS.HSQLDB, DBMS.H2, DBMS.VERTICA, DBMS.PRESTO, DBMS.CRATEDB, DBMS.CACHE, DBMS.VIRTUOSO):
+                    elif Backend.getIdentifiedDbms() in (DBMS.MYSQL, DBMS.PGSQL, DBMS.HSQLDB, DBMS.H2, DBMS.VERTICA, DBMS.PRESTO, DBMS.CRATEDB, DBMS.CACHE, DBMS.VIRTUOSO, DBMS.CLICKHOUSE):
                         query = rootQuery.inband.query % (colString, conf.db, tbl, prioritySortColumns(colList)[0])
                     else:
                         query = rootQuery.inband.query % (colString, conf.db, tbl)
@@ -254,7 +256,7 @@ class Entries(object):
                             kb.dumpKeyboardInterrupt = True
                             clearConsoleLine()
                             warnMsg = "Ctrl+C detected in dumping phase"
-                            logger.warn(warnMsg)
+                            logger.warning(warnMsg)
 
                     if not isNoneValue(entries):
                         if isinstance(entries, six.string_types):
@@ -314,7 +316,7 @@ class Entries(object):
                         warnMsg = "table '%s' " % unsafeSQLIdentificatorNaming(tbl)
                         warnMsg += "in database '%s' " % unsafeSQLIdentificatorNaming(conf.db)
                         warnMsg += "appears to be empty"
-                        logger.warn(warnMsg)
+                        logger.warning(warnMsg)
 
                         for column in colList:
                             lengths[column] = len(column)
@@ -326,7 +328,7 @@ class Entries(object):
                             warnMsg += "column(s) '%s' " % colNames
                         warnMsg += "entries for table '%s' " % unsafeSQLIdentificatorNaming(tbl)
                         warnMsg += "in database '%s'" % unsafeSQLIdentificatorNaming(conf.db)
-                        logger.warn(warnMsg)
+                        logger.warning(warnMsg)
 
                         continue
 
@@ -366,7 +368,7 @@ class Entries(object):
                                 kb.dumpKeyboardInterrupt = True
                                 clearConsoleLine()
                                 warnMsg = "Ctrl+C detected in dumping phase"
-                                logger.warn(warnMsg)
+                                logger.warning(warnMsg)
 
                         if not entries and not kb.dumpKeyboardInterrupt:
                             try:
@@ -376,7 +378,7 @@ class Entries(object):
                                 kb.dumpKeyboardInterrupt = True
                                 clearConsoleLine()
                                 warnMsg = "Ctrl+C detected in dumping phase"
-                                logger.warn(warnMsg)
+                                logger.warning(warnMsg)
 
                             if retVal:
                                 entries, lengths = retVal
@@ -408,7 +410,7 @@ class Entries(object):
                                     if column not in entries:
                                         entries[column] = BigArray()
 
-                                    if Backend.getIdentifiedDbms() in (DBMS.MYSQL, DBMS.PGSQL, DBMS.HSQLDB, DBMS.H2, DBMS.VERTICA, DBMS.PRESTO, DBMS.CRATEDB, DBMS.CACHE):
+                                    if Backend.getIdentifiedDbms() in (DBMS.MYSQL, DBMS.PGSQL, DBMS.HSQLDB, DBMS.H2, DBMS.VERTICA, DBMS.PRESTO, DBMS.CRATEDB, DBMS.CACHE, DBMS.CLICKHOUSE):
                                         query = rootQuery.blind.query % (agent.preprocessField(tbl, column), conf.db, conf.tbl, sorted(colList, key=len)[0], index)
                                     elif Backend.getIdentifiedDbms() in (DBMS.ORACLE, DBMS.DB2, DBMS.DERBY, DBMS.ALTIBASE,):
                                         query = rootQuery.blind.query % (agent.preprocessField(tbl, column), tbl.upper() if not conf.db else ("%s.%s" % (conf.db.upper(), tbl.upper())), index)
@@ -437,7 +439,7 @@ class Entries(object):
                             kb.dumpKeyboardInterrupt = True
                             clearConsoleLine()
                             warnMsg = "Ctrl+C detected in dumping phase"
-                            logger.warn(warnMsg)
+                            logger.warning(warnMsg)
 
                     for column, columnEntries in entries.items():
                         length = max(lengths[column], len(column))
@@ -452,17 +454,20 @@ class Entries(object):
                         warnMsg += "of columns '%s' " % colNames
                     warnMsg += "for table '%s' " % unsafeSQLIdentificatorNaming(tbl)
                     warnMsg += "in database '%s'%s" % (unsafeSQLIdentificatorNaming(conf.db), " (permission denied)" if kb.permissionFlag else "")
-                    logger.warn(warnMsg)
+                    logger.warning(warnMsg)
                 else:
                     kb.data.dumpedTable["__infos__"] = {"count": entriesCount,
                                                         "table": safeSQLIdentificatorNaming(tbl, True),
                                                         "db": safeSQLIdentificatorNaming(conf.db)}
-                    try:
-                        attackDumpedTable()
-                    except (IOError, OSError) as ex:
-                        errMsg = "an error occurred while attacking "
-                        errMsg += "table dump ('%s')" % getSafeExString(ex)
-                        logger.critical(errMsg)
+
+                    if not conf.disableHashing:
+                        try:
+                            attackDumpedTable()
+                        except (IOError, OSError) as ex:
+                            errMsg = "an error occurred while attacking "
+                            errMsg += "table dump ('%s')" % getSafeExString(ex)
+                            logger.critical(errMsg)
+
                     conf.dumper.dbTableValues(kb.data.dumpedTable)
 
             except SqlmapConnectionException as ex:

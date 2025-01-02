@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2022 sqlmap developers (https://sqlmap.org/)
+Copyright (c) 2006-2025 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -133,7 +133,8 @@ def _findUnionCharCount(comment, place, parameter, value, prefix, suffix, where=
             items.append((count, ratio))
 
         if not isNullValue(kb.uChar):
-            for regex in (kb.uChar.strip("'"), r'>\s*%s\s*<' % kb.uChar.strip("'")):
+            value = re.escape(kb.uChar.strip("'"))
+            for regex in (value, r'>\s*%s\s*<' % value):
                 contains = [count for count, content in pages.items() if re.search(regex, content or "", re.IGNORECASE) is not None]
                 if len(contains) == 1:
                     retVal = contains[0]
@@ -275,7 +276,7 @@ def _unionPosition(comment, place, parameter, prefix, suffix, count, where=PAYLO
                         content = ("%s%s" % (removeReflectiveValues(page, payload) or "", removeReflectiveValues(listToStrValue(headers.headers if headers else None), payload, True) or "")).lower()
                         if content.count(phrase) > 0 and content.count(phrase) < LIMITED_ROWS_TEST_NUMBER:
                             warnMsg = "output with limited number of rows detected. Switching to partial mode"
-                            logger.warn(warnMsg)
+                            logger.warning(warnMsg)
                             vector = (position, count, comment, prefix, suffix, kb.uChar, where, kb.unionDuplicates, True, kb.tableFrom, kb.unionTemplate)
 
                 unionErrorCase = kb.errorIsNone and wasLastResponseDBMSError()
@@ -284,7 +285,7 @@ def _unionPosition(comment, place, parameter, prefix, suffix, count, where=PAYLO
                     warnMsg = "combined UNION/error-based SQL injection case found on "
                     warnMsg += "column %d. sqlmap will try to find another " % (position + 1)
                     warnMsg += "column with better characteristics"
-                    logger.warn(warnMsg)
+                    logger.warning(warnMsg)
                 else:
                     break
 
@@ -340,7 +341,7 @@ def _unionTestByCharBruteforce(comment, place, parameter, value, prefix, suffix)
             warnMsg = "if UNION based SQL injection is not detected, "
             warnMsg += "please consider "
 
-            if not conf.uChar and count > 1 and kb.uChar == NULL:
+            if not conf.uChar and count > 1 and kb.uChar == NULL and conf.uValues is None:
                 message = "injection not exploitable with NULL values. Do you want to try with a random integer value for option '--union-char'? [Y/n] "
 
                 if not readInput(message, default='Y', boolean=True):

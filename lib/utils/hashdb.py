@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2022 sqlmap developers (https://sqlmap.org/)
+Copyright (c) 2006-2025 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -62,6 +62,7 @@ class HashDB(object):
         threadData = getCurrentThreadData()
         try:
             if threadData.hashDBCursor:
+                threadData.hashDBCursor.connection.commit()
                 threadData.hashDBCursor.close()
                 threadData.hashDBCursor.connection.close()
                 threadData.hashDBCursor = None
@@ -115,7 +116,7 @@ class HashDB(object):
                 retVal = None
                 warnMsg = "error occurred while unserializing value for session key '%s'. " % key
                 warnMsg += "If the problem persists please rerun with '--flush-session'"
-                logger.warn(warnMsg)
+                logger.warning(warnMsg)
 
         return retVal
 
@@ -162,7 +163,7 @@ class HashDB(object):
                         if retries == 0:
                             warnMsg = "there has been a problem while writing to "
                             warnMsg += "the session file ('%s')" % getSafeExString(ex)
-                            logger.warn(warnMsg)
+                            logger.warning(warnMsg)
 
                         if retries >= HASHDB_FLUSH_RETRIES:
                             return
@@ -180,8 +181,11 @@ class HashDB(object):
             try:
                 self.cursor.execute("BEGIN TRANSACTION")
             except:
-                # Reference: http://stackoverflow.com/a/25245731
-                self.cursor.close()
+                try:
+                    # Reference: http://stackoverflow.com/a/25245731
+                    self.cursor.close()
+                except sqlite3.ProgrammingError:
+                    pass
                 threadData.hashDBCursor = None
                 self.cursor.execute("BEGIN TRANSACTION")
             finally:
@@ -197,6 +201,10 @@ class HashDB(object):
                     threadData.inTransaction = False
                 except sqlite3.OperationalError:
                     pass
+                except sqlite3.ProgrammingError:
+                    self.cursor = None
+                    threadData.inTransaction = False
+                    return
                 else:
                     return
 
