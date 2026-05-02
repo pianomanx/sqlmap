@@ -439,10 +439,7 @@ def stdoutEncode(value):
         if isinstance(value, (bytes, bytearray)):
             value = getUnicode(value, encoding)
         elif not isinstance(value, str):
-            # Non-string values (e.g. dicts passed through the REST API path,
-            # where the overridden sys.stdout.write JSON-encodes the value)
-            # must be returned unchanged — stringifying them via str() yields
-            # Python repr() output that the API consumer cannot parse.
+            # Reference: https://github.com/sqlmapproject/sqlmap/issues/6054
             return value
 
         try:
