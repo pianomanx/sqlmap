@@ -529,6 +529,10 @@ def start():
 
             checkWaf()
 
+            if conf.mineParams and not any((conf.graphql, conf.nosql, conf.ldap, conf.xpath, conf.ssti, conf.xxe, conf.hql)):
+                from lib.utils.paraminer import mineParameters
+                mineParameters()
+
             if any((conf.graphql, conf.nosql, conf.ldap, conf.xpath, conf.ssti, conf.xxe, conf.hql)) and (conf.reportJson or conf.resultsFile):
                 singleTimeWarnMessage("'--report-json'/'--results-file' do not (yet) capture non-SQL technique (--graphql/--nosql/--ldap/--xpath/--ssti/--xxe/--hql) findings; these are reported on the console only")
 

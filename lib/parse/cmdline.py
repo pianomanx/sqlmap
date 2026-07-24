@@ -721,6 +721,9 @@ def cmdLineParser(argv=None):
         general.add_argument("--forms", dest="forms", action="store_true",
             help="Parse and test forms on target URL")
 
+        general.add_argument("--mine-params", dest="mineParams", action="store_true",
+            help="Mine for hidden (unlinked) GET parameters to test")
+
         general.add_argument("--fresh-queries", dest="freshQueries", action="store_true",
             help="Ignore query results stored in session file")
 

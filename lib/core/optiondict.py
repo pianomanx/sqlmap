@@ -241,6 +241,7 @@ optDict = {
         "eta": "boolean",
         "flushSession": "boolean",
         "forms": "boolean",
+        "mineParams": "boolean",
         "freshQueries": "boolean",
         "googlePage": "integer",
         "harFile": "string",
